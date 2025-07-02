@@ -74,7 +74,8 @@ landscape = None
 bounds_ = ast.literal_eval(computed_area)
 release_coords_ = ast.literal_eval(release_coords)
 
-landscape_path = Path("/code/experiments") / input_map #in_path / input_map
+
+landscape_path = Path("/code/outputs") / input_map #in_path / input_map
 
 if landscape_path.exists():
     landscape = inputs.tif_reader(
@@ -83,7 +84,7 @@ if landscape_path.exists():
         bounds=bounds_,
         resolution=2000,
     )
-
+        
     breeding_capacity = landscape.ReadAsArray()
 
     breeding_capacity = 1.5 * np.maximum(breeding_capacity, -1)

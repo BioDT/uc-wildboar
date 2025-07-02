@@ -34,9 +34,69 @@ RUN set -eux; \
     cargo --version; \
     rustc --version;
 
-# Install Python packages including swifco-rs using a private index
-RUN pip install gdal matplotlib pandas shapely pyyaml && \
-    pip3 install swifco-rs --index-url https://__token__:sa_x6t5K1f7AExeEz13s@git.ufz.de/api/v4/projects/2608/packages/pypi/simple
+# Add UbuntuGIS repository for GDAL
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    software-properties-common \
+    && add-apt-repository -y ppa:ubuntugis/ubuntugis-unstable \
+    && apt-get update
+
+# Install system dependencies with specific GDAL version
+RUN apt-get install -y --no-install-recommends \
+    git \
+    build-essential \
+    libssl-dev \
+    pkg-config \
+    python3-pip \
+    python3-setuptools \
+    python3-wheel \
+    python3-dev \
+    gdal-bin \
+    libgdal-dev \
+    python3-gdal \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set GDAL environment variables
+ENV CPLUS_INCLUDE_PATH=/usr/include/gdal
+ENV C_INCLUDE_PATH=/usr/include/gdal
+ENV LD_LIBRARY_PATH=/usr/lib
+
+# Upgrade pip and install Python packages with specific versions
+RUN python3 -m pip install --upgrade pip==23.0.1 && \
+    pip install \
+        'setuptools==65.5.0' \
+        'wheel==0.40.0' && \
+    # Install GDAL Python bindings that match system version
+    pip install --no-cache-dir \
+        'numpy==1.24.4' \
+        'pandas==1.5.3' \
+        'matplotlib==3.7.1' \
+        'shapely==2.0.1' \
+        'pyyaml==6.0' \
+        'maturin==1.0.0'
+
+# Install Rust toolchain with specific version
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+ENV PATH="/root/.cargo/bin:${PATH}"
+RUN rustup default stable && \
+    rustup update && \
+    rustup component add rustfmt clippy
+
+# Clone and install swifco-rs with verbose output
+RUN echo "=== Cloning swifco-rs ===" && \
+    git clone --depth 1 https://git.ufz.de/ecoepi/swifco-rs.git /tmp/swifco-rs && \
+    cd /tmp/swifco-rs && \
+    echo "\n=== Building swifco-rs ===" && \
+    # Install in development mode with verbose output
+    RUSTFLAGS="-C target-cpu=native" \
+    pip install -e . 2>&1 | tee /tmp/build.log || { echo "\n=== Build failed, showing log ===" && cat /tmp/build.log && exit 1; } && \
+    echo "\n=== Build successful, verifying installation ===" && \
+    # Verify installation with simple import check
+    python3 -c "import sys; print('Python path:', sys.path)" && \
+    python3 -c "import importlib.util; print('swifco_rs spec:', importlib.util.find_spec('swifco_rs'))" && \
+    python3 -c "import swifco_rs; print('swifco_rs imported successfully')" && \
+    # Clean up
+    cd / && \
+    rm -rf /root/.cargo/git /root/.cargo/registry /tmp/build.log
 
 COPY shiny.py /code/experiments/shiny.py
 
